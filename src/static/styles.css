@@ -50,6 +50,10 @@ section {
   max-width: 500px;
 }
 
+#organizer-container {
+  max-width: 1030px;
+}
+
 section h3 {
   margin-bottom: 20px;
   padding-bottom: 10px;
@@ -174,12 +178,108 @@ section h3 {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
   width: 100%;
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+}
+
+.form-group textarea {
+  resize: vertical;
+}
+
+.two-column-fields {
+  display: grid;
+  gap: 15px;
+}
+
+@media (min-width: 768px) {
+  .two-column-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.checkbox-group {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  padding-top: 28px;
+}
+
+.checkbox-group input {
+  width: auto;
+}
+
+.organizer-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.secondary-btn {
+  background-color: #eceff1;
+  color: #37474f;
+}
+
+.secondary-btn:hover {
+  background-color: #cfd8dc;
+}
+
+.management-card-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+@media (min-width: 768px) {
+  .management-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.management-card {
+  background-color: #f7f9fc;
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.management-card.inactive {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.management-status {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  text-transform: uppercase;
+}
+
+.management-status.active {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.management-status.inactive {
+  background-color: #eceff1;
+  color: #455a64;
+}
+
+.management-meta {
+  color: #4b5563;
+  margin: 10px 0;
+}
+
+.management-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 button {

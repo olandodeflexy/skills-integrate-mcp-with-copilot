@@ -43,6 +43,58 @@
         </form>
         <div id="message" class="hidden"></div>
       </section>
+
+      <section id="organizer-container">
+        <h3>Organizer Activity Management</h3>
+        <form id="organizer-form">
+          <input type="hidden" id="managed-activity-id" />
+          <div class="form-group">
+            <label for="managed-name">Activity Name:</label>
+            <input type="text" id="managed-name" required placeholder="Robotics Club" />
+          </div>
+          <div class="form-group">
+            <label for="managed-description">Description:</label>
+            <textarea id="managed-description" required rows="3" placeholder="Build and program robots for competitions"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="managed-schedule">Schedule:</label>
+            <input type="text" id="managed-schedule" required placeholder="Mondays, 4:00 PM - 5:30 PM" />
+          </div>
+          <div class="form-group two-column-fields">
+            <div>
+              <label for="managed-location">Location:</label>
+              <input type="text" id="managed-location" placeholder="Lab 204" />
+            </div>
+            <div>
+              <label for="managed-category">Category:</label>
+              <select id="managed-category" required>
+                <option value="club">Club</option>
+                <option value="class">Class</option>
+                <option value="team">Team</option>
+                <option value="program">Program</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group two-column-fields">
+            <div>
+              <label for="managed-capacity">Capacity:</label>
+              <input type="number" id="managed-capacity" min="1" max="500" required value="12" />
+            </div>
+            <div class="checkbox-group">
+              <label for="managed-active">Visible to students</label>
+              <input type="checkbox" id="managed-active" checked />
+            </div>
+          </div>
+          <div class="organizer-actions">
+            <button type="submit" id="organizer-submit">Create Activity</button>
+            <button type="button" id="organizer-reset" class="secondary-btn hidden">Cancel Edit</button>
+          </div>
+        </form>
+        <div id="organizer-message" class="hidden"></div>
+        <div id="organizer-activities-list">
+          <p>Loading organizer activity management...</p>
+        </div>
+      </section>
     </main>
 
     <footer>
