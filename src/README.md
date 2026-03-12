@@ -9,6 +9,7 @@ The app persists its core data in a local SQLite database with explicit models f
 - View all available extracurricular activities
 - Sign up for activities
 - Unregister students using stable registration records in the normalized API
+- Create, update, and archive activities through the organizer workflow
 
 ## Getting Started
 
@@ -53,12 +54,36 @@ The app currently exposes both a legacy compatibility API and a normalized API.
 | DELETE | `/api/activities/{activity_id}/registrations/{registration_id}` | Cancel a registration by ID |
 | GET | `/api/students/{student_id}/registrations` | List registrations for one student |
 
+### Organizer management endpoints
+
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET | `/api/management/activities` | List all activities, including archived ones, for organizer workflows |
+| POST | `/api/management/activities` | Create a new activity |
+| PUT | `/api/management/activities/{activity_id}` | Update an existing activity |
+| POST | `/api/management/activities/{activity_id}/archive` | Archive or deactivate an activity |
+| POST | `/api/management/activities/{activity_id}/restore` | Restore an archived activity |
+
 Example registration request body:
 
 ```json
 {
    "email": "student@mergington.edu",
    "full_name": "Student Name"
+}
+```
+
+Example organizer activity request body:
+
+```json
+{
+   "name": "Robotics Club",
+   "description": "Design, build, and program competitive robots.",
+   "schedule_text": "Mondays, 4:00 PM - 5:30 PM",
+   "location": "Lab 204",
+   "category": "club",
+   "max_participants": 16,
+   "is_active": true
 }
 ```
 
@@ -88,3 +113,5 @@ The application now uses persistent core domain models:
 ## Persistence Notes
 
 Default activities are seeded into the database only on first startup. The legacy endpoints remain available for backward compatibility, while the static frontend now uses the normalized API endpoints for listing activities, creating registrations, and cancelling registrations.
+
+The organizer section on the same page uses the management API to create, edit, archive, and restore activities without changing Python source code.

@@ -15,19 +15,62 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const fullNameInput = document.getElementById("full-name");
   const messageDiv = document.getElementById("message");
+  const organizerForm = document.getElementById("organizer-form");
+  const organizerList = document.getElementById("organizer-activities-list");
+  const organizerMessageDiv = document.getElementById("organizer-message");
+  const managedActivityIdInput = document.getElementById("managed-activity-id");
+  const managedNameInput = document.getElementById("managed-name");
+  const managedDescriptionInput = document.getElementById("managed-description");
+  const managedScheduleInput = document.getElementById("managed-schedule");
+  const managedLocationInput = document.getElementById("managed-location");
+  const managedCategoryInput = document.getElementById("managed-category");
+  const managedCapacityInput = document.getElementById("managed-capacity");
+  const managedActiveInput = document.getElementById("managed-active");
+  const organizerSubmitButton = document.getElementById("organizer-submit");
+  const organizerResetButton = document.getElementById("organizer-reset");
   const defaultSelectMarkup =
     '<option value="">-- Select an activity --</option>';
-  let messageTimeoutId;
+  const messageTimeouts = new Map();
+  let organizerActivities = [];
 
-  function showMessage(text, type) {
-    messageDiv.textContent = text;
-    messageDiv.className = type;
-    messageDiv.classList.remove("hidden");
+  function showMessage(target, text, type) {
+    target.textContent = text;
+    target.className = type;
+    target.classList.remove("hidden");
 
-    globalThis.clearTimeout(messageTimeoutId);
-    messageTimeoutId = globalThis.setTimeout(() => {
-      messageDiv.classList.add("hidden");
+    globalThis.clearTimeout(messageTimeouts.get(target));
+    const timeoutId = globalThis.setTimeout(() => {
+      target.classList.add("hidden");
     }, 5000);
+    messageTimeouts.set(target, timeoutId);
+  }
+
+  function resetOrganizerForm() {
+    organizerForm.reset();
+    managedActivityIdInput.value = "";
+    managedActiveInput.checked = true;
+    organizerSubmitButton.textContent = "Create Activity";
+    organizerResetButton.classList.add("hidden");
+  }
+
+  function fillOrganizerForm(activity) {
+    managedActivityIdInput.value = String(activity.id);
+    managedNameInput.value = activity.name;
+    managedDescriptionInput.value = activity.description;
+    managedScheduleInput.value = activity.schedule_text;
+    managedLocationInput.value = activity.location || "";
+    managedCategoryInput.value = activity.category;
+    managedCapacityInput.value = String(activity.max_participants);
+    managedActiveInput.checked = activity.is_active;
+    organizerSubmitButton.textContent = "Save Changes";
+    organizerResetButton.classList.remove("hidden");
+    organizerForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function findOrganizerActivity(activityId) {
+    return organizerActivities.find(
+      (activity) => String(activity.id) === String(activityId)
+    );
   }
 
   async function fetchActivities() {
@@ -117,8 +160,80 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function fetchOrganizerActivities() {
+    try {
+      const activitiesResponse = await fetchJson("/api/management/activities");
+      const activities = activitiesResponse.activities;
+      organizerActivities = activities;
+
+      if (!activities.length) {
+        organizerList.innerHTML = "<p>No activities have been created yet.</p>";
+        return;
+      }
+
+      organizerList.innerHTML = '<div class="management-card-grid"></div>';
+      const cardGrid = organizerList.firstElementChild;
+
+      activities.forEach((activity) => {
+        const card = document.createElement("article");
+        card.className = activity.is_active
+          ? "management-card"
+          : "management-card inactive";
+        const visibilityLabel = activity.is_active ? "Active" : "Archived";
+        const toggleLabel = activity.is_active ? "Archive" : "Restore";
+        card.innerHTML = `
+          <span class="management-status ${activity.is_active ? "active" : "inactive"}">${visibilityLabel}</span>
+          <div class="activity-heading">
+            <h4>${activity.name}</h4>
+            <span class="activity-category">${activity.category}</span>
+          </div>
+          <p>${activity.description}</p>
+          <div class="management-meta">
+            <p><strong>Schedule:</strong> ${activity.schedule_text}</p>
+            <p><strong>Location:</strong> ${activity.location || "TBD"}</p>
+            <p><strong>Capacity:</strong> ${activity.registered_count} / ${activity.max_participants}</p>
+          </div>
+          <div class="management-buttons">
+            <button type="button" class="secondary-btn edit-activity-btn" data-activity-id="${activity.id}">Edit</button>
+            <button type="button" class="secondary-btn toggle-activity-btn" data-activity-id="${activity.id}" data-next-state="${activity.is_active ? "archive" : "restore"}">${toggleLabel}</button>
+          </div>
+        `;
+        cardGrid.appendChild(card);
+      });
+    } catch (error) {
+      organizerList.innerHTML =
+        "<p>Failed to load organizer activity management. Please try again later.</p>";
+      console.error("Error fetching organizer activities:", error);
+    }
+  }
+
+  async function refreshAllViews() {
+    await Promise.all([fetchActivities(), fetchOrganizerActivities()]);
+  }
+
+  async function handleActivityVisibilityToggle(event) {
+    const { activityId, nextState } = event.currentTarget.dataset;
+    const endpoint = nextState === "archive" ? "archive" : "restore";
+
+    try {
+      const result = await fetchJson(
+        `/api/management/activities/${encodeURIComponent(activityId)}/${endpoint}`,
+        { method: "POST" }
+      );
+      showMessage(organizerMessageDiv, result.message, "success");
+      await refreshAllViews();
+    } catch (error) {
+      showMessage(
+        organizerMessageDiv,
+        error.message || "Failed to update activity visibility.",
+        "error"
+      );
+      console.error("Error updating activity visibility:", error);
+    }
+  }
+
   async function handleUnregister(event) {
-    const button = event.target;
+    const button = event.currentTarget;
     const { activityId, registrationId } = button.dataset;
 
     try {
@@ -128,10 +243,14 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/registrations/${encodeURIComponent(registrationId)}`,
         { method: "DELETE" }
       );
-      showMessage(result.message, "success");
+      showMessage(messageDiv, result.message, "success");
       fetchActivities();
     } catch (error) {
-      showMessage(error.message || "Failed to unregister. Please try again.", "error");
+      showMessage(
+        messageDiv,
+        error.message || "Failed to unregister. Please try again.",
+        "error"
+      );
       console.error("Error unregistering:", error);
     }
   }
@@ -157,14 +276,84 @@ document.addEventListener("DOMContentLoaded", () => {
           }),
         }
       );
-      showMessage(result.message, "success");
+      showMessage(messageDiv, result.message, "success");
       signupForm.reset();
       fetchActivities();
     } catch (error) {
-      showMessage(error.message || "Failed to sign up. Please try again.", "error");
+      showMessage(
+        messageDiv,
+        error.message || "Failed to sign up. Please try again.",
+        "error"
+      );
       console.error("Error signing up:", error);
     }
   });
 
-  fetchActivities();
+  organizerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const activityId = managedActivityIdInput.value;
+    const payload = {
+      name: managedNameInput.value,
+      description: managedDescriptionInput.value,
+      schedule_text: managedScheduleInput.value,
+      location: managedLocationInput.value,
+      category: managedCategoryInput.value,
+      max_participants: Number(managedCapacityInput.value),
+      is_active: managedActiveInput.checked,
+    };
+    const isEditing = Boolean(activityId);
+    const endpoint = isEditing
+      ? `/api/management/activities/${encodeURIComponent(activityId)}`
+      : "/api/management/activities";
+    const method = isEditing ? "PUT" : "POST";
+
+    try {
+      const result = await fetchJson(endpoint, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      showMessage(organizerMessageDiv, result.message, "success");
+      resetOrganizerForm();
+      await refreshAllViews();
+    } catch (error) {
+      showMessage(
+        organizerMessageDiv,
+        error.message || "Failed to save activity changes.",
+        "error"
+      );
+      console.error("Error saving activity:", error);
+    }
+  });
+
+  organizerResetButton.addEventListener("click", () => {
+    resetOrganizerForm();
+  });
+
+  organizerList.addEventListener("click", (event) => {
+    const clickedElement = event.target;
+    if (!(clickedElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const editButton = clickedElement.closest(".edit-activity-btn");
+    if (editButton instanceof HTMLElement) {
+      const activity = findOrganizerActivity(editButton.dataset.activityId);
+      if (activity) {
+        fillOrganizerForm(activity);
+      }
+      return;
+    }
+
+    const toggleButton = clickedElement.closest(".toggle-activity-btn");
+    if (toggleButton instanceof HTMLElement) {
+      handleActivityVisibilityToggle({ currentTarget: toggleButton });
+    }
+  });
+
+  resetOrganizerForm();
+  refreshAllViews();
 });

@@ -263,6 +263,29 @@ def _serialize_registration(row: sqlite3.Row) -> dict:
     }
 
 
+def _activity_query(include_inactive: bool = False) -> str:
+    active_filter = "" if include_inactive else "WHERE a.is_active = 1"
+    return f"""
+        SELECT
+            a.id,
+            a.name,
+            a.description,
+            a.schedule_text,
+            a.location,
+            a.category,
+            a.max_participants,
+            a.is_active,
+            a.created_at,
+            a.updated_at,
+            COALESCE(SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END), 0) AS registered_count,
+            COALESCE(SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END), 0) AS waitlisted_count
+        FROM activities a
+        LEFT JOIN registrations r ON r.activity_id = a.id
+        {active_filter}
+        GROUP BY a.id
+    """
+
+
 def _get_activity_by_id_row(connection: sqlite3.Connection, activity_id: int) -> sqlite3.Row | None:
     return connection.execute(
         """
@@ -323,26 +346,17 @@ def _get_registration_row(connection: sqlite3.Connection, registration_id: int) 
 def list_activities() -> list[dict]:
     with get_connection() as connection:
         rows = connection.execute(
-            """
-            SELECT
-                a.id,
-                a.name,
-                a.description,
-                a.schedule_text,
-                a.location,
-                a.category,
-                a.max_participants,
-                a.is_active,
-                a.created_at,
-                a.updated_at,
-                COALESCE(SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END), 0) AS registered_count,
-                COALESCE(SUM(CASE WHEN r.status = ? THEN 1 ELSE 0 END), 0) AS waitlisted_count
-            FROM activities a
-            LEFT JOIN registrations r ON r.activity_id = a.id
-            WHERE a.is_active = 1
-            GROUP BY a.id
-            ORDER BY a.name
-            """,
+            _activity_query() + " ORDER BY a.name",
+            (REGISTRATION_STATUS_REGISTERED, REGISTRATION_STATUS_WAITLISTED),
+        ).fetchall()
+
+    return [_serialize_activity(row) for row in rows]
+
+
+def list_activities_for_management() -> list[dict]:
+    with get_connection() as connection:
+        rows = connection.execute(
+            _activity_query(include_inactive=True) + " ORDER BY a.is_active DESC, a.name",
             (REGISTRATION_STATUS_REGISTERED, REGISTRATION_STATUS_WAITLISTED),
         ).fetchall()
 
@@ -356,6 +370,117 @@ def get_activity(activity_id: int) -> dict:
             raise KeyError(ACTIVITY_NOT_FOUND)
 
     return _serialize_activity(row)
+
+
+def create_activity(
+    name: str,
+    description: str,
+    schedule_text: str,
+    category: str,
+    max_participants: int,
+    location: str | None = None,
+    is_active: bool = True,
+) -> dict:
+    with get_connection() as connection:
+        try:
+            cursor = connection.execute(
+                """
+                INSERT INTO activities (
+                    name,
+                    description,
+                    schedule_text,
+                    location,
+                    category,
+                    max_participants,
+                    is_active
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    description,
+                    schedule_text,
+                    location,
+                    category,
+                    max_participants,
+                    1 if is_active else 0,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("Activity name already exists") from error
+
+        activity_row = _get_activity_by_id_row(connection, cursor.lastrowid)
+
+    return _serialize_activity(activity_row)
+
+
+def update_activity(
+    activity_id: int,
+    name: str,
+    description: str,
+    schedule_text: str,
+    category: str,
+    max_participants: int,
+    location: str | None = None,
+    is_active: bool = True,
+) -> dict:
+    with get_connection() as connection:
+        existing_activity = _get_activity_by_id_row(connection, activity_id)
+        if not existing_activity:
+            raise KeyError(ACTIVITY_NOT_FOUND)
+        if existing_activity["registered_count"] > max_participants:
+            raise ValueError("Capacity cannot be lower than current registered count")
+
+        try:
+            connection.execute(
+                """
+                UPDATE activities
+                SET name = ?,
+                    description = ?,
+                    schedule_text = ?,
+                    location = ?,
+                    category = ?,
+                    max_participants = ?,
+                    is_active = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    name,
+                    description,
+                    schedule_text,
+                    location,
+                    category,
+                    max_participants,
+                    1 if is_active else 0,
+                    activity_id,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValueError("Activity name already exists") from error
+
+        activity_row = _get_activity_by_id_row(connection, activity_id)
+
+    return _serialize_activity(activity_row)
+
+
+def set_activity_active(activity_id: int, is_active: bool) -> dict:
+    with get_connection() as connection:
+        existing_activity = _get_activity_by_id_row(connection, activity_id)
+        if not existing_activity:
+            raise KeyError(ACTIVITY_NOT_FOUND)
+
+        connection.execute(
+            """
+            UPDATE activities
+            SET is_active = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (1 if is_active else 0, activity_id),
+        )
+        activity_row = _get_activity_by_id_row(connection, activity_id)
+
+    return _serialize_activity(activity_row)
 
 
 def list_activity_registrations(activity_id: int) -> list[dict]:
