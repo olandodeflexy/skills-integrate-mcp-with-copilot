@@ -1,15 +1,26 @@
-"""
-High School Management System API
+"""High School Management System API."""
 
-A super simple FastAPI application that allows students to view and sign up
-for extracurricular activities at Mergington High School.
-"""
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+from pydantic import BaseModel
+
+from storage import (
+    cancel_registration,
+    get_activity,
+    initialize_database,
+    list_activities,
+    list_activities_legacy,
+    list_activity_registrations,
+    list_student_registrations,
+    register_student_for_activity,
+    signup_student,
+    unregister_student,
+)
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -19,63 +30,18 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
 
-# In-memory activity database
-activities = {
-    "Chess Club": {
-        "description": "Learn strategies and compete in chess tournaments",
-        "schedule": "Fridays, 3:30 PM - 5:00 PM",
-        "max_participants": 12,
-        "participants": ["michael@mergington.edu", "daniel@mergington.edu"]
-    },
-    "Programming Class": {
-        "description": "Learn programming fundamentals and build software projects",
-        "schedule": "Tuesdays and Thursdays, 3:30 PM - 4:30 PM",
-        "max_participants": 20,
-        "participants": ["emma@mergington.edu", "sophia@mergington.edu"]
-    },
-    "Gym Class": {
-        "description": "Physical education and sports activities",
-        "schedule": "Mondays, Wednesdays, Fridays, 2:00 PM - 3:00 PM",
-        "max_participants": 30,
-        "participants": ["john@mergington.edu", "olivia@mergington.edu"]
-    },
-    "Soccer Team": {
-        "description": "Join the school soccer team and compete in matches",
-        "schedule": "Tuesdays and Thursdays, 4:00 PM - 5:30 PM",
-        "max_participants": 22,
-        "participants": ["liam@mergington.edu", "noah@mergington.edu"]
-    },
-    "Basketball Team": {
-        "description": "Practice and play basketball with the school team",
-        "schedule": "Wednesdays and Fridays, 3:30 PM - 5:00 PM",
-        "max_participants": 15,
-        "participants": ["ava@mergington.edu", "mia@mergington.edu"]
-    },
-    "Art Club": {
-        "description": "Explore your creativity through painting and drawing",
-        "schedule": "Thursdays, 3:30 PM - 5:00 PM",
-        "max_participants": 15,
-        "participants": ["amelia@mergington.edu", "harper@mergington.edu"]
-    },
-    "Drama Club": {
-        "description": "Act, direct, and produce plays and performances",
-        "schedule": "Mondays and Wednesdays, 4:00 PM - 5:30 PM",
-        "max_participants": 20,
-        "participants": ["ella@mergington.edu", "scarlett@mergington.edu"]
-    },
-    "Math Club": {
-        "description": "Solve challenging problems and participate in math competitions",
-        "schedule": "Tuesdays, 3:30 PM - 4:30 PM",
-        "max_participants": 10,
-        "participants": ["james@mergington.edu", "benjamin@mergington.edu"]
-    },
-    "Debate Team": {
-        "description": "Develop public speaking and argumentation skills",
-        "schedule": "Fridays, 4:00 PM - 5:30 PM",
-        "max_participants": 12,
-        "participants": ["charlotte@mergington.edu", "henry@mergington.edu"]
-    }
-}
+initialize_database()
+
+
+class RegistrationCreateRequest(BaseModel):
+    email: str
+    full_name: Optional[str] = None
+
+
+def _detail_from_exception(error: Exception) -> str:
+    if isinstance(error, KeyError) and error.args:
+        return str(error.args[0])
+    return str(error)
 
 
 @app.get("/")
@@ -85,48 +51,122 @@ def root():
 
 @app.get("/activities")
 def get_activities():
-    return activities
+    return list_activities_legacy()
 
 
-@app.post("/activities/{activity_name}/signup")
+@app.get("/api/activities")
+def get_normalized_activities():
+    return {"activities": list_activities()}
+
+
+@app.get(
+    "/api/activities/{activity_id}",
+    responses={404: {"description": "Activity not found"}},
+)
+def get_activity_detail(activity_id: int):
+    try:
+        return get_activity(activity_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+
+
+@app.get(
+    "/api/activities/{activity_id}/registrations",
+    responses={404: {"description": "Activity not found"}},
+)
+def get_activity_registration_list(activity_id: int):
+    try:
+        return {
+            "activity": get_activity(activity_id),
+            "registrations": list_activity_registrations(activity_id),
+        }
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+
+
+@app.post(
+    "/api/activities/{activity_id}/registrations",
+    status_code=201,
+    responses={400: {"description": "Invalid registration request"}, 404: {"description": "Activity not found"}},
+)
+def create_registration(activity_id: int, payload: RegistrationCreateRequest):
+    try:
+        registration = register_student_for_activity(activity_id, payload.email, payload.full_name)
+        activity = get_activity(activity_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
+    except OverflowError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
+
+    return {
+        "message": f"Registered {registration['student']['email']} for {activity['name']}",
+        "registration": registration,
+        "activity": activity,
+    }
+
+
+@app.delete(
+    "/api/activities/{activity_id}/registrations/{registration_id}",
+    responses={400: {"description": "Invalid cancellation request"}, 404: {"description": "Resource not found"}},
+)
+def delete_registration(activity_id: int, registration_id: int):
+    try:
+        registration = cancel_registration(activity_id, registration_id)
+        activity = get_activity(activity_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
+
+    return {
+        "message": f"Cancelled registration {registration_id} for {activity['name']}",
+        "registration": registration,
+        "activity": activity,
+    }
+
+
+@app.get(
+    "/api/students/{student_id}/registrations",
+    responses={404: {"description": "Student not found"}},
+)
+def get_student_registration_list(student_id: int):
+    try:
+        return {"registrations": list_student_registrations(student_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+
+
+@app.post(
+    "/activities/{activity_name}/signup",
+    responses={400: {"description": "Invalid signup request"}, 404: {"description": "Activity not found"}},
+)
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    try:
+        signup_student(activity_name, email)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
+    except OverflowError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
 
-    # Get the specific activity
-    activity = activities[activity_name]
-
-    # Validate student is not already signed up
-    if email in activity["participants"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Student is already signed up"
-        )
-
-    # Add student
-    activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
-@app.delete("/activities/{activity_name}/unregister")
+@app.delete(
+    "/activities/{activity_name}/unregister",
+    responses={400: {"description": "Invalid unregister request"}, 404: {"description": "Activity not found"}},
+)
 def unregister_from_activity(activity_name: str, email: str):
     """Unregister a student from an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    try:
+        unregister_student(activity_name, email)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=_detail_from_exception(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_detail_from_exception(exc)) from exc
 
-    # Get the specific activity
-    activity = activities[activity_name]
-
-    # Validate student is signed up
-    if email not in activity["participants"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Student is not signed up for this activity"
-        )
-
-    # Remove student
-    activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
