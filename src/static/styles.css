@@ -66,8 +66,27 @@ section h3 {
 }
 
 .activity-card h4 {
-  margin-bottom: 10px;
+  margin-bottom: 0;
   color: #0066cc;
+}
+
+.activity-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.activity-category {
+  background-color: #e8eaf6;
+  border-radius: 999px;
+  color: #1a237e;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  text-transform: uppercase;
 }
 
 .activity-card p {
@@ -96,8 +115,9 @@ section h3 {
   padding: 4px 0;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
 }
 
 /* Remove the bullet point pseudo-element */
@@ -105,24 +125,37 @@ section h3 {
   display: none;
 }
 
+.participant-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.participant-name {
+  color: #1f2937;
+  font-weight: bold;
+}
+
 .participant-email {
+  color: #666;
   flex-grow: 1;
   margin-right: 8px;
 }
 
 .delete-btn {
-  background: none;
-  border: none;
+  background-color: #ffebee;
+  border: 1px solid #ef9a9a;
   color: #c62828;
   cursor: pointer;
-  font-size: 14px;
-  padding: 2px 5px;
+  font-size: 13px;
+  padding: 6px 10px;
   transition: all 0.2s;
-  border-radius: 3px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .delete-btn:hover {
-  background-color: #ffebee;
+  background-color: #ffcdd2;
 }
 
 .participants-section p {

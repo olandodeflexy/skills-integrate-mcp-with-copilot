@@ -8,6 +8,7 @@ The app persists its core data in a local SQLite database with explicit models f
 
 - View all available extracurricular activities
 - Sign up for activities
+- Unregister students using stable registration records in the normalized API
 
 ## Getting Started
 
@@ -86,4 +87,4 @@ The application now uses persistent core domain models:
 
 ## Persistence Notes
 
-Default activities are seeded into the database only on first startup. The legacy endpoints remain available for the current frontend, while the normalized API is the target surface for future frontend updates.
+Default activities are seeded into the database only on first startup. The legacy endpoints remain available for backward compatibility, while the static frontend now uses the normalized API endpoints for listing activities, creating registrations, and cancelling registrations.
